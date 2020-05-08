@@ -16,7 +16,7 @@ def load_obj(name ):
 def soup_content_from_url(driver, url):
     driver.get(url)
     content = driver.page_source
-    soup = BeautifulSoup(content)
+    soup = BeautifulSoup(content,features="lxml")
     return soup
 
 
@@ -36,7 +36,7 @@ def elements_from_soup_bestsellers_web(soup):
             badges.append(badge.text)
             descriptions.append(desc.text)
             links.append(href)
-            prices.append(price.text)
+            prices.append(price.text.replace("€",""))
     return pd.DataFrame({'Badge':badges,'Product':descriptions,'Price':prices,'Link':links})
 
 
@@ -81,13 +81,15 @@ def detail_dict_from_product_page(soup,url):
         detailhtml = soup.find('div',attrs={'id':'detail_bullets_id'})
         detail = get_bucket_content_table(detailhtml)
     
-    # SELLERS
-    sellers = soup.find('div', attrs={'id':'olp-upd-new-freeshipping-threshold'})
-    if sellers:
-        detail['sellers'] = sellers.text.replace("\n","")
+    sellers = None
+    sellersdiv = soup.find('div', attrs={'id':'olp-upd-new-freeshipping-threshold'})
+    if sellersdiv:
+        sellers = sellersdiv.text.replace("\n","")
     else:
-        sellers = soup.find('div', attrs={'id':'olp-new'})
+        sellersdiv = soup.find('div', attrs={'id':'olp-new'})
         if sellers:
-            detail['sellers'] = sellers.text.replace("\n","")
+            sellers = sellersdiv.text.replace("\n","")
+    if sellers:
+        detail['sellers'] = sellers[sellers.find("(")+1:sellers.find(")")]
     
     return detail

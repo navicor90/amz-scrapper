@@ -1,0 +1,6 @@
+requests
+selectorlib
+jupyter
+beautifulsoup4
+selenium
+pandas

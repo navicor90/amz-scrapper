@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 import pandas as pd
-
+import re
 import pickle
 import sys
 sys.setrecursionlimit(50000)
@@ -73,23 +73,99 @@ def detail_dict_from_product_page(soup,url):
             detail[label] = value.replace("\n","")
         return detail
     
-    detailhtml = soup.find('div', attrs={'id':'prodDetails'})
-        
+    
+    detailhtml = soup.find('div', attrs={'id': 'prodDetails'})
+    print(detailhtml)
     if detailhtml:
         detail = get_label_value_table(detailhtml)
     else:
-        detailhtml = soup.find('div',attrs={'id':'detail_bullets_id'})
-        detail = get_bucket_content_table(detailhtml)
-    
-    sellers = None
-    sellersdiv = soup.find('div', attrs={'id':'olp-upd-new-freeshipping-threshold'})
-    if sellersdiv:
-        sellers = sellersdiv.text.replace("\n","")
-    else:
-        sellersdiv = soup.find('div', attrs={'id':'olp-new'})
-        if sellers:
-            sellers = sellersdiv.text.replace("\n","")
-    if sellers:
-        detail['sellers'] = sellers[sellers.find("(")+1:sellers.find(")")]
+        detailhtml = soup.find('div', attrs={'id': 'detail_bullets_id'})
+        if detailhtml:
+            detail = get_bucket_content_table(detailhtml)
+        else:
+            detailhtml = soup.find('div',attrs={'id':'detail_bullets_id'})
+            print('fail looking:' + url)
+    # There is different flavors about sellers info, and in each one have a different id
+    sellers_div_ids = ['olp-upd-new-freeshipping-threshold','olp-upd-new-freeshipping','olp-new',
+                       'olp-upd-new-used-freeshipping-threshold']
+    for div_id in sellers_div_ids:
+        sellers_div = soup.find('div', attrs={'id':div_id})
+        if sellers_div:
+            s = sellers_div.text.replace("\n","")
+            detail['sellers'] = s[s.find("(")+1:s.find(")")]
+            break
     
     return detail
+
+
+
+class AmzProduct: 
+    ref_amz_id = None
+    detail_link = None
+    brand = None
+    description = None
+    price = None
+    reviews = None
+    stars = None
+    stock = None
+    
+    def __init__(self,amz_data_dict):
+        for k,v in amz_data_dict.items():
+            if isinstance(k,str):
+                setattr(self,k,v)
+
+class ProductSerch:
+    ref_local_id = None
+    provider_name = None
+    amz_related_products = []
+
+
+def amz_products_with_soup(soup):
+    def search_results(soup):
+        return (soup.find('span',attrs={'data-component-type':'s-search-results'})
+                   .findAll('div',attrs={'class':'s-result-item'}))
+    
+    def data_from_div_result(div_result):
+        def text_elements(item_div_result):
+            inner_elements = item_div_result.contents
+            while len(inner_elements) == 1:
+                inner_elements = inner_elements[0].contents
+                # Cleaning contents
+                for i,e in enumerate(inner_elements):
+                    if len(str(e).strip()) == 0 or e.text.strip() is "":
+                        inner_elements.remove(e)
+            return inner_elements
+        
+        def data_dict_from_elements(elements):
+            data = {}
+            for i,e in enumerate(elements):
+                if 'estrellas' in str(e):
+                    stars = e.find('span',string=re.compile('estrellas'))
+                    data['stars'] = str(stars.text).strip()
+                elif 'h2' in str(e):
+                    link = e.find('a')
+                    data['description'] = str(e.text).strip()
+                    data['link'] = link.get("href")
+                elif 'a-price' in str(e).strip():
+                    whole_price = e.find('span',attrs={'class':'a-price-whole'}).text
+                    symbol = e.find('span',attrs={'class':'a-price-symbol'}).text
+                    data['price'] = str(whole_price)+symbol
+                elif 'stock' in str(e):
+                    stock = e.find('span',string=re.compile('stock'))
+                    data['stock'] = str(stock.text).strip()
+                else:
+                    #data[i] = str(e.text).strip()
+                    pass
+            return data
+        elements = text_elements(div_result)
+        return data_dict_from_elements(elements)
+    print("Splitting results...")
+    div_results = search_results(soup)
+    products = []
+    print(f'{len(div_results)} elements found. \nConverting to AmzProduct objects...')
+    for dr in div_results:
+        amz_data = data_from_div_result(dr)
+        products.append(AmzProduct(amz_data))
+    print('Ready!.')
+    return products
+        

@@ -12,6 +12,10 @@ def save_obj(obj, name ):
 def load_obj(name ):
     with open('obj/' + name + '.pkl', 'rb') as f:
         return pickle.load(f)
+    
+def save_soup(soup, file_name):
+    with open("soups/"+file_name+".html", "w") as file:
+        file.write(str(soup))
 
 def soup_content_from_url(driver, url):
     driver.get(url)
@@ -113,14 +117,45 @@ class AmzProduct:
         for k,v in amz_data_dict.items():
             if isinstance(k,str):
                 setattr(self,k,v)
+        getattr(self,'description')#is mandatory
+    
+    def list_order():
+        return ["ref_amz_id",
+            "detail_link",
+            "brand",
+            "description",
+            "price",
+            "reviews",
+            "stars",
+            "stock"]
+    
+    def to_list(self):
+        return [getattr(self,a) for a in AmzProduct.list_order()]
 
-class ProductSerch:
+class ProductSearch:
     ref_local_id = None
     provider_name = None
     amz_related_products = []
+    soup = None
+    
+    def __init__(self, provider_name, ref_local_id, amz_related_products, soup):
+        self.provider_name = provider_name
+        self.ref_local_id = ref_local_id
+        self.amz_related_products = amz_related_products
+        self.soup = soup
+    
+    def list_order():
+        return ['provider_name','ref_local_id']+AmzProduct.list_order()
+    
+    def to_list(self):
+        result = []
+        base_result = [self.provider_name,self.ref_local_id]
+        for p in self.amz_related_products:
+            result.append(base_result + p.to_list())
+        return result
 
 
-def amz_products_with_soup(soup):
+def amz_products_with_soup(soup, silent=True):
     def search_results(soup):
         return (soup.find('span',attrs={'data-component-type':'s-search-results'})
                    .findAll('div',attrs={'class':'s-result-item'}))
@@ -136,10 +171,27 @@ def amz_products_with_soup(soup):
                         inner_elements.remove(e)
             return inner_elements
         
+        def is_avoidable_result(e):
+            # Avoiding obvius publicity - Official webs -
+            is_publicity = (len(str(e).strip())>0 and 
+                            e.get('class') and
+                           'template=SAFE_FRAME' in e.get('class'))
+
+            is_help_frame = (len(str(e).strip())>0 and 
+                            e.get('class') and
+                           'template=FEEDBACK' in e.get('class'))
+
+            is_message = (len(str(e).strip())>0 and 
+                            e.get('class') and
+                           'template=TOP_BANNER_MESSAGE' in e.get('class'))
+            return is_publicity or is_help_frame or is_message
+        
         def data_dict_from_elements(elements):
             data = {}
             for i,e in enumerate(elements):
-                if 'estrellas' in str(e):
+                if is_avoidable_result(e):
+                    continue
+                elif 'estrellas' in str(e):
                     stars = e.find('span',string=re.compile('estrellas'))
                     data['stars'] = str(stars.text).strip()
                 elif 'h2' in str(e):
@@ -157,15 +209,25 @@ def amz_products_with_soup(soup):
                     #data[i] = str(e.text).strip()
                     pass
             return data
+        
         elements = text_elements(div_result)
         return data_dict_from_elements(elements)
-    print("Splitting results...")
+    
+    if not silent:
+        print("Splitting results...")
+    
     div_results = search_results(soup)
     products = []
-    print(f'{len(div_results)} elements found. \nConverting to AmzProduct objects...')
+    
+    if not silent:
+        print(f'{len(div_results)} elements found. \nConverting to AmzProduct objects...')
+    
     for dr in div_results:
         amz_data = data_from_div_result(dr)
-        products.append(AmzProduct(amz_data))
-    print('Ready!.')
+        if len(amz_data.keys()) >= 3:
+            products.append(AmzProduct(amz_data))
+    
+    if not silent:
+        print('Ready!.')
     return products
         

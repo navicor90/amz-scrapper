@@ -4,3 +4,4 @@ jupyter
 beautifulsoup4
 selenium
 pandas
+sklearn

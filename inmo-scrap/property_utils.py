@@ -41,7 +41,7 @@ class Property(object):
                 'url',
                 'description',
                 'property_type',
-                'owner',
+                'agency',
                 'source_web',
                 'recent_id',
                 'scrapped_date',
